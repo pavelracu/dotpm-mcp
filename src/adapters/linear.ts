@@ -183,19 +183,29 @@ export async function findProjects(teamId: string, query?: string): Promise<Arra
   const cached = cache.get<Array<{ id: string; name: string; state: string; url: string }>>(cacheKey);
   if (cached) return cached;
 
-  const data = await gql<{ projects: { nodes: Array<{ id: string; name: string; state: string; url: string }> } }>(
-    `query($teamId: ID!) {
-      projects(filter: { accessibleTeams: { id: { eq: $teamId } } }, first: 50) {
-        nodes { id name state url }
-      }
-    }`,
-    { teamId },
-  );
+  // Use searchProjects for name search, fall back to listing all
+  let results: Array<{ id: string; name: string; state: string; url: string }>;
 
-  let results = data.projects.nodes;
   if (query) {
-    const q = query.toLowerCase();
-    results = results.filter((p) => p.name.toLowerCase().includes(q));
+    // Linear's searchProjects does fuzzy text matching
+    const data = await gql<{ searchProjects: { nodes: Array<{ id: string; name: string; state: string; url: string }> } }>(
+      `query($query: String!) {
+        searchProjects(term: $query, first: 20) {
+          nodes { id name state url }
+        }
+      }`,
+      { query },
+    );
+    results = data.searchProjects.nodes;
+  } else {
+    const data = await gql<{ projects: { nodes: Array<{ id: string; name: string; state: string; url: string }> } }>(
+      `query {
+        projects(first: 50) {
+          nodes { id name state url }
+        }
+      }`,
+    );
+    results = data.projects.nodes;
   }
 
   cache.set(cacheKey, results, CACHE_TTL);
