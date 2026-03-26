@@ -285,6 +285,53 @@ export async function createIssue(
   return data.issueCreate.issue;
 }
 
+export async function getWorkflowStates(teamId: string): Promise<Array<{ id: string; name: string; type: string }>> {
+  const cacheKey = `linear:team:${teamId}:states`;
+  const cached = cache.get<Array<{ id: string; name: string; type: string }>>(cacheKey);
+  if (cached) return cached;
+
+  const data = await gql<{ workflowStates: { nodes: Array<{ id: string; name: string; type: string }> } }>(
+    `query($teamId: ID!) {
+      workflowStates(filter: { team: { id: { eq: $teamId } } }) {
+        nodes { id name type }
+      }
+    }`,
+    { teamId },
+  );
+
+  cache.set(cacheKey, data.workflowStates.nodes, CACHE_TTL * 5); // states rarely change
+  return data.workflowStates.nodes;
+}
+
+export async function updateIssue(
+  issueId: string,
+  updates: { stateId?: string; priority?: number; title?: string; description?: string },
+): Promise<{ success: boolean; identifier: string }> {
+  const data = await gql<{
+    issueUpdate: { success: boolean; issue: { identifier: string } };
+  }>(
+    `mutation($id: String!, $input: IssueUpdateInput!) {
+      issueUpdate(id: $id, input: $input) {
+        success
+        issue { identifier }
+      }
+    }`,
+    { id: issueId, input: updates },
+  );
+
+  cache.invalidatePrefix("linear:");
+  return { success: data.issueUpdate.success, identifier: data.issueUpdate.issue.identifier };
+}
+
+/** Bulk update multiple issues in parallel */
+export async function bulkUpdateIssues(
+  updates: Array<{ issueId: string; stateId?: string; priority?: number }>,
+): Promise<Array<{ success: boolean; identifier: string }>> {
+  return Promise.all(
+    updates.map((u) => updateIssue(u.issueId, { stateId: u.stateId, priority: u.priority })),
+  );
+}
+
 export async function getBacklog(teamId: string): Promise<LinearIssue[]> {
   const cacheKey = `linear:team:${teamId}:backlog`;
   const cached = cache.get<LinearIssue[]>(cacheKey);
