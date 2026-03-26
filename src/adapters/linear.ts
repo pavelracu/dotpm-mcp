@@ -231,7 +231,7 @@ export async function getProject(projectId: string): Promise<LinearProject | nul
   if (cached) return cached;
 
   const data = await gql<{ project: LinearProject }>(
-    `query($id: ID!) {
+    `query($id: String!) {
       project(id: $id) {
         id name description state url
         issues {
@@ -241,7 +241,6 @@ export async function getProject(projectId: string): Promise<LinearProject | nul
             assignee { id name }
             labels { nodes { name } }
             createdAt completedAt startedAt estimate url
-            project { id name }
           }
         }
       }
