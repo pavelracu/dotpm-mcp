@@ -148,11 +148,15 @@ export function registerReviewTools(server: McpServer): void {
       let output = `# Task Review: ${projectData.name}\nTasks: ${issues.length} | Findings: ${findings.length}\n`;
 
       // Include project brief/description so Claude knows it's already loaded
+      const hasBrief = !!(projectData.description || brief);
       if (projectData.description) {
-        output += `\n## Project Brief\n${projectData.description.slice(0, 3000)}\n`;
+        output += `\n## Project Brief (already loaded — do NOT offer to fetch it)\n${projectData.description.slice(0, 3000)}\n`;
       }
       if (brief) {
-        output += `\n## Linked Brief Document\n${brief.content.slice(0, 3000)}\n`;
+        output += `\n## Linked Brief Document (already loaded — do NOT offer to fetch it)\n${brief.content.slice(0, 3000)}\n`;
+      }
+      if (hasBrief) {
+        output += `\nNOTE: The project brief is included above. Do NOT ask the user if they want to "pull" or "read" the brief — you already have it. Analyze it directly.\n`;
       }
 
       if (findings.length === 0) {
