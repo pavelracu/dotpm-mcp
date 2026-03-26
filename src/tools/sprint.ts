@@ -7,7 +7,6 @@ import {
   getBacklog,
   getCompletedIssues,
   getTeamMembers,
-  gqlAll,
   type LinearIssue,
 } from "../adapters/linear.js";
 
@@ -131,36 +130,12 @@ Progress: ${pct}% (${done}/${total})
 
       const teamId = config.linear.teamId;
 
-      // Fetch backlog, completed issues, and team members in parallel
-      const [backlog, completed, members] = await gqlAll<
-        [LinearIssue[], LinearIssue[], Array<{ id: string; name: string; email: string; active: boolean }>]
-      >([
-        {
-          query: `query($teamId: ID!) {
-            issues(filter: { team: { id: { eq: $teamId } }, state: { type: { in: ["backlog", "unstarted"] } } }, first: 100) {
-              nodes { id identifier title priority state { name type } assignee { id name } labels { nodes { name } } estimate url project { id name } }
-            }
-          }`,
-          variables: { teamId },
-        },
-        {
-          query: `query($teamId: ID!, $since: DateTime!) {
-            issues(filter: { team: { id: { eq: $teamId } }, state: { type: { eq: "completed" } }, completedAt: { gte: $since } }, first: 200) {
-              nodes { id identifier title assignee { id name } completedAt startedAt estimate }
-            }
-          }`,
-          variables: { teamId, since: new Date(Date.now() - 30 * 86400000).toISOString() },
-        },
-        {
-          query: `query($teamId: ID!) { team(id: $teamId) { members { nodes { id name email active } } } }`,
-          variables: { teamId },
-        },
+      // Fetch backlog, completed issues, and team members in parallel (all cached)
+      const [backlogIssues, completedIssues, teamMembers] = await Promise.all([
+        getBacklog(teamId),
+        getCompletedIssues(teamId, 30),
+        getTeamMembers(teamId),
       ]);
-
-      // The gqlAll returns raw GraphQL data, extract the arrays
-      const backlogIssues = (backlog as unknown as { issues: { nodes: LinearIssue[] } }).issues.nodes;
-      const completedIssues = (completed as unknown as { issues: { nodes: LinearIssue[] } }).issues.nodes;
-      const teamMembers = (members as unknown as { team: { members: { nodes: Array<{ id: string; name: string; active: boolean }> } } }).team.members.nodes.filter((m) => m.active);
 
       // Calculate throughput per person (last 30 days → per sprint)
       const throughput = new Map<string, number>();

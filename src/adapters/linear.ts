@@ -174,7 +174,7 @@ export async function createProject(
     },
   );
 
-  cache.invalidatePrefix("linear:");
+  cache.invalidatePrefix(`linear:team:${teamId}:projects`);
   return data.projectCreate.project;
 }
 
@@ -281,7 +281,9 @@ export async function createIssue(
     { input },
   );
 
-  cache.invalidatePrefix("linear:");
+  cache.invalidate(`linear:team:${teamId}:backlog`);
+  cache.invalidate(`linear:team:${teamId}:active-cycle`);
+  if (projectId) cache.invalidate(`linear:project:${projectId}`);
   return data.issueCreate.issue;
 }
 
@@ -317,6 +319,10 @@ export async function getCompletedIssues(
   teamId: string,
   sinceDaysAgo: number = 30,
 ): Promise<LinearIssue[]> {
+  const cacheKey = `linear:team:${teamId}:completed:${sinceDaysAgo}`;
+  const cached = cache.get<LinearIssue[]>(cacheKey);
+  if (cached) return cached;
+
   const since = new Date(Date.now() - sinceDaysAgo * 86400000).toISOString();
 
   const data = await gql<{ issues: { nodes: LinearIssue[] } }>(
@@ -339,6 +345,7 @@ export async function getCompletedIssues(
     { teamId, since },
   );
 
+  cache.set(cacheKey, data.issues.nodes, CACHE_TTL);
   return data.issues.nodes;
 }
 

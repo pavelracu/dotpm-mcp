@@ -3,8 +3,11 @@ import { readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getTodosPath } from "../config/manager.js";
-import { findDocs } from "../adapters/storage.js";
+import { listDocs } from "../adapters/storage.js";
 import type { TodoItem } from "../config/types.js";
+import { createLock } from "../utils.js";
+
+const withTodoLock = createLock();
 
 function today(): string {
   const d = new Date();
@@ -68,6 +71,11 @@ async function saveTodos(todos: TodoItem[]): Promise<void> {
   await writeFile(getTodosPath(), serializeTodos(todos) + "\n", "utf-8");
 }
 
+function nextTodoId(todos: TodoItem[]): number {
+  if (todos.length === 0) return 1;
+  return Math.max(...todos.map((t) => t.id)) + 1;
+}
+
 export function registerTodoTools(server: McpServer): void {
   server.tool(
     "add_todo",
@@ -80,25 +88,27 @@ export function registerTodoTools(server: McpServer): void {
         .describe("Optional tags for categorization, e.g. ['linear', 'brief']"),
     },
     async ({ text, tags }) => {
-      const todos = await loadTodos();
-      const newTodo: TodoItem = {
-        id: todos.length + 1,
-        text,
-        tags: tags ?? [],
-        createdAt: today(),
-        done: false,
-      };
-      todos.push(newTodo);
-      await saveTodos(todos);
+      return withTodoLock(async () => {
+        const todos = await loadTodos();
+        const newTodo: TodoItem = {
+          id: nextTodoId(todos),
+          text,
+          tags: tags ?? [],
+          createdAt: today(),
+          done: false,
+        };
+        todos.push(newTodo);
+        await saveTodos(todos);
 
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Added todo #${newTodo.id}: ${text}${tags?.length ? ` [${tags.join(", ")}]` : ""}`,
-          },
-        ],
-      };
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Added todo #${newTodo.id}: ${text}${tags?.length ? ` [${tags.join(", ")}]` : ""}`,
+            },
+          ],
+        };
+      });
     },
   );
 
@@ -129,32 +139,32 @@ export function registerTodoTools(server: McpServer): void {
         };
       }
 
-      // Enrich each todo with related docs in parallel
-      const enriched = await Promise.all(
-        filtered.map(async (todo) => {
-          // Extract meaningful words for search (skip short words)
-          const searchTerms = todo.text
-            .split(/\s+/)
-            .filter((w) => w.length > 3)
+      // Get doc index once (cached 30s), match by filename only — no N+1 file reads
+      const allDocs = await listDocs();
+
+      const enriched = filtered.map((todo) => {
+        const searchTerms = todo.text
+          .split(/\s+/)
+          .filter((w) => w.length > 3)
+          .slice(0, 3)
+          .map((w) => w.toLowerCase());
+
+        let relatedDocs: string[] = [];
+        if (searchTerms.length > 0) {
+          relatedDocs = allDocs
+            .filter((doc) => {
+              const name = doc.name.toLowerCase();
+              return searchTerms.some((t) => name.includes(t));
+            })
             .slice(0, 3)
-            .join(" ");
+            .map((d) => `  ${d.category}/${d.name}`);
+        }
 
-          let relatedDocs: string[] = [];
-          if (searchTerms) {
-            try {
-              const docs = await findDocs(searchTerms);
-              relatedDocs = docs.slice(0, 3).map((d) => `  ${d.category}/${d.name}`);
-            } catch {
-              // Doc search failed, that's fine
-            }
-          }
-
-          const check = todo.done ? "x" : " ";
-          const tags = todo.tags.length > 0 ? ` [${todo.tags.join(", ")}]` : "";
-          const related = relatedDocs.length > 0 ? `\n  Related docs:\n${relatedDocs.map((d) => `    • ${d}`).join("\n")}` : "";
-          return `#${todo.id} [${check}] ${todo.text}${tags} — ${todo.createdAt}${related}`;
-        }),
-      );
+        const check = todo.done ? "x" : " ";
+        const tags = todo.tags.length > 0 ? ` [${todo.tags.join(", ")}]` : "";
+        const related = relatedDocs.length > 0 ? `\n  Related docs:\n${relatedDocs.map((d) => `    • ${d}`).join("\n")}` : "";
+        return `#${todo.id} [${check}] ${todo.text}${tags} — ${todo.createdAt}${related}`;
+      });
 
       return {
         content: [
@@ -178,30 +188,32 @@ export function registerTodoTools(server: McpServer): void {
         .describe("Optional link to the output — a file path or URL"),
     },
     async ({ todo_id, link }) => {
-      const todos = await loadTodos();
-      const todo = todos.find((t) => t.id === todo_id);
+      return withTodoLock(async () => {
+        const todos = await loadTodos();
+        const todo = todos.find((t) => t.id === todo_id);
 
-      if (!todo) {
+        if (!todo) {
+          return {
+            content: [{ type: "text" as const, text: `Todo #${todo_id} not found.` }],
+            isError: true,
+          };
+        }
+
+        todo.done = true;
+        todo.completedAt = today();
+        if (link) todo.link = link;
+
+        await saveTodos(todos);
+
         return {
-          content: [{ type: "text" as const, text: `Todo #${todo_id} not found.` }],
-          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text: `Completed todo #${todo_id}: ${todo.text}${link ? `\n  → ${link}` : ""}`,
+            },
+          ],
         };
-      }
-
-      todo.done = true;
-      todo.completedAt = today();
-      if (link) todo.link = link;
-
-      await saveTodos(todos);
-
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Completed todo #${todo_id}: ${todo.text}${link ? `\n  → ${link}` : ""}`,
-          },
-        ],
-      };
+      });
     },
   );
 }

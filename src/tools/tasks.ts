@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadConfig, readTemplate } from "../config/manager.js";
 import { resolveProject, createIssue, findProjects } from "../adapters/linear.js";
 import { readDoc } from "../adapters/storage.js";
+import { processInBatches } from "../utils.js";
 
 export function registerTaskTools(server: McpServer): void {
   server.tool(
@@ -61,16 +62,14 @@ export function registerTaskTools(server: McpServer): void {
         }
       }
 
-      // Create all issues in parallel
-      const results = await Promise.all(
-        tasks.map((task) =>
-          createIssue(
-            config.linear!.teamId,
-            task.title,
-            task.description,
-            projectId,
-            task.priority,
-          ),
+      // Create issues in batches of 5 to respect Linear rate limits
+      const results = await processInBatches(tasks, 5, (task) =>
+        createIssue(
+          config.linear!.teamId,
+          task.title,
+          task.description,
+          projectId,
+          task.priority,
         ),
       );
 

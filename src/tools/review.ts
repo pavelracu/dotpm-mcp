@@ -58,19 +58,6 @@ function analyzeTaskConsistency(issues: LinearIssue[], briefContent?: string): R
     }
   }
 
-  // Check for tasks referencing each other in Out of Scope (good practice indicator)
-  const allIdentifiers = new Set(issues.map((i) => i.identifier));
-  for (const issue of issues) {
-    const desc = issue.description ?? "";
-    const outOfScopeMatch = desc.match(/## 3\. Out of Scope[\s\S]*?(?=## 4|$)/);
-    if (outOfScopeMatch) {
-      const referenced = issues.filter(
-        (other) => other.identifier !== issue.identifier && outOfScopeMatch[0].includes(other.identifier),
-      );
-      // This is actually good — skip
-    }
-  }
-
   // Check brief coverage if we have the brief
   if (briefContent) {
     // Extract requirement lines from brief
