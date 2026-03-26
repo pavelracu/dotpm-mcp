@@ -69,7 +69,7 @@ export async function getTeamMembers(teamId: string): Promise<LinearUser[]> {
   if (cached) return cached;
 
   const data = await gql<{ team: { members: { nodes: LinearUser[] } } }>(
-    `query($teamId: String!) { team(id: $teamId) { members { nodes { id name email active } } } }`,
+    `query($teamId: ID!) { team(id: $teamId) { members { nodes { id name email active } } } }`,
     { teamId },
   );
   const members = data.team.members.nodes.filter((m) => m.active);
@@ -114,7 +114,7 @@ export async function getActiveCycle(teamId: string): Promise<LinearCycle | null
   if (cached !== undefined) return cached;
 
   const data = await gql<{ team: { activeCycle: LinearCycle | null } }>(
-    `query($teamId: String!) {
+    `query($teamId: ID!) {
       team(id: $teamId) {
         activeCycle {
           id name number startsAt endsAt progress
@@ -184,7 +184,7 @@ export async function findProjects(teamId: string, query?: string): Promise<Arra
   if (cached) return cached;
 
   const data = await gql<{ projects: { nodes: Array<{ id: string; name: string; state: string; url: string }> } }>(
-    `query($teamId: String!) {
+    `query($teamId: ID!) {
       projects(filter: { accessibleTeams: { id: { eq: $teamId } } }, first: 50) {
         nodes { id name state url }
       }
@@ -221,7 +221,7 @@ export async function getProject(projectId: string): Promise<LinearProject | nul
   if (cached) return cached;
 
   const data = await gql<{ project: LinearProject }>(
-    `query($id: String!) {
+    `query($id: ID!) {
       project(id: $id) {
         id name description state url
         issues {
@@ -282,7 +282,7 @@ export async function getBacklog(teamId: string): Promise<LinearIssue[]> {
   if (cached) return cached;
 
   const data = await gql<{ issues: { nodes: LinearIssue[] } }>(
-    `query($teamId: String!) {
+    `query($teamId: ID!) {
       issues(filter: {
         team: { id: { eq: $teamId } }
         state: { type: { in: ["backlog", "unstarted"] } }
@@ -311,7 +311,7 @@ export async function getCompletedIssues(
   const since = new Date(Date.now() - sinceDaysAgo * 86400000).toISOString();
 
   const data = await gql<{ issues: { nodes: LinearIssue[] } }>(
-    `query($teamId: String!, $since: DateTime!) {
+    `query($teamId: ID!, $since: DateTime!) {
       issues(filter: {
         team: { id: { eq: $teamId } }
         state: { type: { eq: "completed" } }

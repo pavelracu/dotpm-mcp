@@ -136,7 +136,7 @@ Progress: ${pct}% (${done}/${total})
         [LinearIssue[], LinearIssue[], Array<{ id: string; name: string; email: string; active: boolean }>]
       >([
         {
-          query: `query($teamId: String!) {
+          query: `query($teamId: ID!) {
             issues(filter: { team: { id: { eq: $teamId } }, state: { type: { in: ["backlog", "unstarted"] } } }, first: 100) {
               nodes { id identifier title priority state { name type } assignee { id name } labels { nodes { name } } estimate url project { id name } }
             }
@@ -144,7 +144,7 @@ Progress: ${pct}% (${done}/${total})
           variables: { teamId },
         },
         {
-          query: `query($teamId: String!, $since: DateTime!) {
+          query: `query($teamId: ID!, $since: DateTime!) {
             issues(filter: { team: { id: { eq: $teamId } }, state: { type: { eq: "completed" } }, completedAt: { gte: $since } }, first: 200) {
               nodes { id identifier title assignee { id name } completedAt startedAt estimate }
             }
@@ -152,7 +152,7 @@ Progress: ${pct}% (${done}/${total})
           variables: { teamId, since: new Date(Date.now() - 30 * 86400000).toISOString() },
         },
         {
-          query: `query($teamId: String!) { team(id: $teamId) { members { nodes { id name email active } } } }`,
+          query: `query($teamId: ID!) { team(id: $teamId) { members { nodes { id name email active } } } }`,
           variables: { teamId },
         },
       ]);
