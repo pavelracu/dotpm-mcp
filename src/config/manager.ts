@@ -1,5 +1,5 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { DotpmConfig, TeamConfig } from "./types.js";
@@ -44,7 +44,6 @@ export async function loadConfig(): Promise<DotpmConfig> {
   }
 
   // Check if file changed since last cache
-  const { statSync } = await import("node:fs");
   const stat = statSync(CONFIG_PATH);
   const mtime = stat.mtimeMs;
 
@@ -62,14 +61,12 @@ export async function saveConfig(config: DotpmConfig): Promise<void> {
   await mkdir(DOTPM_DIR, { recursive: true });
   await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), "utf-8");
   cachedConfig = config;
-  const { statSync } = await import("node:fs");
   configMtime = statSync(CONFIG_PATH).mtimeMs;
 }
 
 export async function loadTeam(): Promise<TeamConfig | null> {
   if (!existsSync(TEAM_PATH)) return null;
 
-  const { statSync } = await import("node:fs");
   const stat = statSync(TEAM_PATH);
   const mtime = stat.mtimeMs;
 
@@ -86,7 +83,6 @@ export async function loadTeam(): Promise<TeamConfig | null> {
 export async function saveTeam(team: TeamConfig): Promise<void> {
   await writeFile(TEAM_PATH, JSON.stringify(team, null, 2), "utf-8");
   cachedTeam = team;
-  const { statSync } = await import("node:fs");
   teamMtime = statSync(TEAM_PATH).mtimeMs;
 }
 

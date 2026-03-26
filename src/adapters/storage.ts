@@ -1,4 +1,4 @@
-import { readFile, writeFile, readdir, mkdir, stat } from "node:fs/promises";
+import { readFile, writeFile, readdir, mkdir, stat, open } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, basename, relative } from "node:path";
 import { getDocsDir, loadConfig } from "../config/manager.js";
@@ -124,15 +124,22 @@ export async function findDocs(query: string, category?: DocCategory): Promise<D
     return terms.some((t) => name.includes(t));
   });
 
-  // Second pass: content match in parallel (only for docs not already matched)
-  const unmatched = allDocs.filter((d) => !filenameMatches.includes(d));
+  // Second pass: content match (capped at 20 files, 50KB per file)
+  const MAX_CONTENT_SEARCH = 20;
+  const MAX_READ_BYTES = 50 * 1024;
+  const unmatched = allDocs.filter((d) => !filenameMatches.includes(d)).slice(0, MAX_CONTENT_SEARCH);
   const contentChecks = await Promise.all(
     unmatched.map(async (doc) => {
       try {
-        const content = await readFile(doc.path, "utf-8");
-        const lower = content.toLowerCase();
-        const matches = terms.some((t) => lower.includes(t));
-        return matches ? doc : null;
+        const handle = await open(doc.path, "r");
+        try {
+          const buf = Buffer.alloc(MAX_READ_BYTES);
+          const { bytesRead } = await handle.read(buf, 0, MAX_READ_BYTES, 0);
+          const content = buf.toString("utf-8", 0, bytesRead).toLowerCase();
+          return terms.some((t) => content.includes(t)) ? doc : null;
+        } finally {
+          await handle.close();
+        }
       } catch {
         return null;
       }

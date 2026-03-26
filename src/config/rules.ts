@@ -1,9 +1,12 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { getDotpmDir } from "./manager.js";
+import { createLock } from "../utils.js";
 
-const RULES_PATH = () => join(getDotpmDir(), "rules.md");
+const RULES_PATH = join(getDotpmDir(), "rules.md");
+
+const withRulesLock = createLock();
 
 let cachedRules: string | null = null;
 let rulesMtime = 0;
@@ -14,10 +17,9 @@ let rulesMtime = 0;
  * Unlike resources (opt-in), rules are always present.
  */
 export async function loadRules(): Promise<string> {
-  const path = RULES_PATH();
+  const path = RULES_PATH;
   if (!existsSync(path)) return "";
 
-  const { statSync } = await import("node:fs");
   const stat = statSync(path);
   if (cachedRules && stat.mtimeMs === rulesMtime) {
     return cachedRules;
@@ -30,35 +32,38 @@ export async function loadRules(): Promise<string> {
 
 export async function saveRules(content: string): Promise<void> {
   await mkdir(getDotpmDir(), { recursive: true });
-  const path = RULES_PATH();
+  const path = RULES_PATH;
   await writeFile(path, content, "utf-8");
   cachedRules = content;
-  const { statSync } = await import("node:fs");
   rulesMtime = statSync(path).mtimeMs;
 }
 
 export async function addRule(rule: string): Promise<string> {
-  const current = await loadRules();
-  const lines = current.split("\n").filter((l) => l.trim());
-  // Avoid duplicates
-  if (lines.some((l) => l.includes(rule))) {
-    return current;
-  }
-  lines.push(`- ${rule}`);
-  const updated = lines.join("\n") + "\n";
-  await saveRules(updated);
-  return updated;
+  return withRulesLock(async () => {
+    const current = await loadRules();
+    const lines = current.split("\n").filter((l) => l.trim());
+    // Avoid duplicates
+    if (lines.some((l) => l.includes(rule))) {
+      return current;
+    }
+    lines.push(`- ${rule}`);
+    const updated = lines.join("\n") + "\n";
+    await saveRules(updated);
+    return updated;
+  });
 }
 
 export async function removeRule(keyword: string): Promise<{ removed: boolean; rule?: string }> {
-  const current = await loadRules();
-  const lines = current.split("\n").filter((l) => l.trim());
-  const idx = lines.findIndex((l) => l.toLowerCase().includes(keyword.toLowerCase()));
-  if (idx === -1) return { removed: false };
+  return withRulesLock(async () => {
+    const current = await loadRules();
+    const lines = current.split("\n").filter((l) => l.trim());
+    const idx = lines.findIndex((l) => l.toLowerCase().includes(keyword.toLowerCase()));
+    if (idx === -1) return { removed: false };
 
-  const removed = lines.splice(idx, 1)[0];
-  await saveRules(lines.join("\n") + "\n");
-  return { removed: true, rule: removed };
+    const removed = lines.splice(idx, 1)[0];
+    await saveRules(lines.join("\n") + "\n");
+    return { removed: true, rule: removed };
+  });
 }
 
 /**
