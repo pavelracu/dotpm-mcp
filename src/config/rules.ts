@@ -76,7 +76,7 @@ export async function getRulesContext(): Promise<string> {
  * Teaches users the 'remember' tool exists at the moment they'd need it.
  */
 export function getRulesNudge(): string {
-  return `\n💡 Something off? Use "remember" to save a rule (e.g. remember("Do not suggest X")).`;
+  return `\n💡 Something off? Use "add_rule" to change tool behavior (e.g. add_rule("Do not suggest X")).`;
 }
 
 export const DEFAULT_RULES = `- Do not add estimates to tasks. Estimates are the team's responsibility, not the product manager's. Only include estimates if explicitly asked.
@@ -86,4 +86,6 @@ export const DEFAULT_RULES = `- Do not add estimates to tasks. Estimates are the
 - Do not suggest milestones, labels, or organizational structures unless the user asks for them.
 - Do not prescribe technical solutions. Define what and why. The tech lead decides how.
 - When reviewing tasks, focus on: missing template sections, unclear acceptance criteria, gaps in brief coverage, and duplicates. Do not flag missing estimates or assignments.
+- Flag technical findings in reviews but do NOT write them into briefs, tasks, or acceptance criteria. Technical decisions are the tech lead's output after discovery.
+- Lead with the simple story. Match analysis depth to what's needed for product decisions, not exhaustive technical detail.
 `;

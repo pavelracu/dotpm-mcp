@@ -7,7 +7,7 @@ export const TOOL_ROUTING_PREAMBLE = `IMPORTANT — Tool routing rules:
 - dotpm tools handle Linear API calls internally, apply your saved rules, and use your templates.
 - For todos → dotpm add_todo, get_todos, complete_todo
 - For docs → dotpm save_doc, find_docs, read_doc, update_doc
-- For rules/memory → dotpm remember, forget, list_rules (NEVER use your own memory system)
+- For tool behavior rules → dotpm add_rule, remove_rule, list_rules (these control what tools recommend — separate from your own memory which handles user preferences)
 - For Linear operations:
   • "check tasks" / "find inconsistencies" / "review" → dotpm review_tasks
   • "sprint status" / "how's the sprint" → dotpm sprint_status

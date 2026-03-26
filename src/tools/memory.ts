@@ -4,10 +4,10 @@ import { loadRules, addRule, removeRule, saveRules } from "../config/rules.js";
 
 export function registerMemoryTools(server: McpServer): void {
   server.tool(
-    "remember",
-    "Save a workflow rule or convention to dotpm's rules system (~/.dotpm/rules.md). ALWAYS use this tool — not your own memory — when the user says 'remember', 'don't do X', 'never suggest X', or corrects your behavior. Rules are injected into every dotpm tool response so they can't be ignored. Use this for: workflow conventions, things to avoid, team norms, recurring corrections.",
+    "add_rule",
+    "Add a rule that controls how dotpm tools behave. Rules are injected into tool responses (review, sprint, tasks) so they can't be ignored. Use this for: what tools should NOT recommend, workflow constraints, team conventions. This is NOT memory — it's tool configuration. Examples: 'Do not suggest estimates', 'Do not prescribe technical solutions'.",
     {
-      rule: z.string().describe("The rule to remember — e.g. 'Do not add estimates to tasks'"),
+      rule: z.string().describe("The rule — e.g. 'Do not add estimates to tasks'"),
     },
     async ({ rule }) => {
       const updated = await addRule(rule);
@@ -16,7 +16,7 @@ export function registerMemoryTools(server: McpServer): void {
         content: [
           {
             type: "text" as const,
-            text: `Remembered: "${rule}"\n${count} active rule(s).`,
+            text: `Rule added: "${rule}"\n${count} active rule(s).`,
           },
         ],
       };
@@ -24,8 +24,8 @@ export function registerMemoryTools(server: McpServer): void {
   );
 
   server.tool(
-    "forget",
-    "Remove a rule by keyword match. Use list_rules first to see what's active.",
+    "remove_rule",
+    "Remove a dotpm rule by keyword match. Use list_rules first to see what's active.",
     {
       keyword: z.string().describe("Keyword to find the rule to remove"),
     },
@@ -42,7 +42,7 @@ export function registerMemoryTools(server: McpServer): void {
         content: [
           {
             type: "text" as const,
-            text: `Removed: ${result.rule}`,
+            text: `Rule removed: ${result.rule}`,
           },
         ],
       };
@@ -51,7 +51,7 @@ export function registerMemoryTools(server: McpServer): void {
 
   server.tool(
     "list_rules",
-    "Show all active rules/conventions that are applied to every interaction.",
+    "Show all active dotpm rules. These are injected into every tool response to control behavior.",
     {},
     async () => {
       const rules = await loadRules();
@@ -60,7 +60,7 @@ export function registerMemoryTools(server: McpServer): void {
           content: [
             {
               type: "text" as const,
-              text: "No rules configured. Use 'remember' to add workflow conventions.",
+              text: "No rules configured. Use 'add_rule' to set tool behavior constraints.",
             },
           ],
         };
@@ -73,7 +73,7 @@ export function registerMemoryTools(server: McpServer): void {
 
   server.tool(
     "replace_rules",
-    "Replace all rules at once. Use this to bulk-edit your conventions.",
+    "Replace all dotpm rules at once. Use this to bulk-edit tool behavior constraints.",
     {
       rules: z.string().describe("Full rules content — one rule per line, starting with '- '"),
     },
