@@ -1,0 +1,35 @@
+{
+  "name": "dotpm-mcp",
+  "version": "0.1.0",
+  "description": "AI-powered product management MCP server — todos, briefs, Linear integration, sprint planning",
+  "type": "module",
+  "bin": {
+    "dotpm-mcp": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "product-management",
+    "linear",
+    "ai",
+    "task-manager",
+    "claude"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.28.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.5.0"
+  }
+}
