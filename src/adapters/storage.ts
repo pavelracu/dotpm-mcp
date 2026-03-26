@@ -1,4 +1,4 @@
-import { readFile, writeFile, readdir, mkdir, stat, open } from "node:fs/promises";
+import { readFile, writeFile, readdir, mkdir, stat, open, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, basename, relative } from "node:path";
 import { getDocsDir, loadConfig } from "../config/manager.js";
@@ -198,6 +198,17 @@ export async function updateDoc(
   }
 
   await writeFile(doc.path, content, "utf-8");
+  cache.invalidatePrefix("doc-index:");
+  return { path: doc.path, success: true };
+}
+
+export async function deleteDoc(
+  pathOrQuery: string,
+): Promise<{ path: string; success: boolean }> {
+  const doc = await readDoc(pathOrQuery);
+  if (!doc) return { path: pathOrQuery, success: false };
+
+  await unlink(doc.path);
   cache.invalidatePrefix("doc-index:");
   return { path: doc.path, success: true };
 }

@@ -5,7 +5,7 @@ import { loadRules, addRule, removeRule, saveRules } from "../config/rules.js";
 export function registerMemoryTools(server: McpServer): void {
   server.tool(
     "add_rule",
-    "Add a rule that controls how dotpm tools behave. Rules are injected into tool responses (review, sprint, tasks) so they can't be ignored. Use this for: what tools should NOT recommend, workflow constraints, team conventions. This is NOT memory — it's tool configuration. Examples: 'Do not suggest estimates', 'Do not prescribe technical solutions'.",
+    "ALWAYS use this (not Write/Edit tool on rules.md) to add a dotpm behavioral rule. Rules are injected into tool responses (review, sprint, tasks) so they can't be ignored. Use for: workflow constraints, team conventions, what tools should NOT recommend. NOT memory — tool configuration.",
     {
       rule: z.string().describe("The rule — e.g. 'Do not add estimates to tasks'"),
     },
@@ -25,7 +25,7 @@ export function registerMemoryTools(server: McpServer): void {
 
   server.tool(
     "remove_rule",
-    "Remove a dotpm rule by keyword match. Use list_rules first to see what's active.",
+    "ALWAYS use this (not Edit tool on rules.md) to remove a dotpm rule by keyword match. Use list_rules first to see what's active.",
     {
       keyword: z.string().describe("Keyword to find the rule to remove"),
     },
@@ -51,7 +51,7 @@ export function registerMemoryTools(server: McpServer): void {
 
   server.tool(
     "list_rules",
-    "Show all active dotpm rules. These are injected into every tool response to control behavior.",
+    "ALWAYS use this (not Read tool on rules.md) to show all active dotpm rules. These are injected into every tool response to control behavior.",
     {},
     async () => {
       const rules = await loadRules();
@@ -73,7 +73,7 @@ export function registerMemoryTools(server: McpServer): void {
 
   server.tool(
     "replace_rules",
-    "Replace all dotpm rules at once. Use this to bulk-edit tool behavior constraints.",
+    "ALWAYS use this (not Write tool on rules.md) to replace all dotpm rules at once. Use for bulk-editing tool behavior constraints.",
     {
       rules: z.string().describe("Full rules content — one rule per line, starting with '- '"),
     },

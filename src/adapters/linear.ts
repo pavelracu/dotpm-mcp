@@ -144,9 +144,36 @@ interface LinearProject {
   id: string;
   name: string;
   description?: string;
+  content?: string;
   state: string;
   url: string;
   issues: { nodes: LinearIssue[] };
+}
+
+export async function getProjectStatuses(): Promise<Array<{ id: string; name: string }>> {
+  const cacheKey = "linear:project-statuses";
+  const cached = cache.get<Array<{ id: string; name: string }>>(cacheKey);
+  if (cached) return cached;
+
+  // Linear doesn't expose a top-level projectStatuses query easily,
+  // so scan existing projects to discover available status IDs
+  const data = await gql<{ projects: { nodes: Array<{ status: { id: string; name: string } }> } }>(
+    `{ projects(first: 50) { nodes { status { id name } } } }`,
+  );
+
+  const seen = new Map<string, string>();
+  for (const p of data.projects.nodes) {
+    if (!seen.has(p.status.id)) seen.set(p.status.id, p.status.name);
+  }
+  const statuses = Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+  cache.set(cacheKey, statuses, CACHE_TTL * 10);
+  return statuses;
+}
+
+export async function resolveProjectStatusId(statusName: string): Promise<string | null> {
+  const statuses = await getProjectStatuses();
+  const match = statuses.find((s) => s.name.toLowerCase() === statusName.toLowerCase());
+  return match?.id ?? null;
 }
 
 export async function createProject(
@@ -155,6 +182,16 @@ export async function createProject(
   description: string,
   status: string = "planned",
 ): Promise<{ id: string; url: string }> {
+  // Resolve status name to ID
+  const statusId = await resolveProjectStatusId(status);
+
+  const input: Record<string, unknown> = {
+    name,
+    description,
+    teamIds: [teamId],
+  };
+  if (statusId) input.statusId = statusId;
+
   const data = await gql<{
     projectCreate: { success: boolean; project: { id: string; url: string } };
   }>(
@@ -164,14 +201,7 @@ export async function createProject(
         project { id url }
       }
     }`,
-    {
-      input: {
-        name,
-        description,
-        state: status,
-        teamIds: [teamId],
-      },
-    },
+    { input },
   );
 
   cache.invalidatePrefix(`linear:team:${teamId}:projects`);
@@ -233,7 +263,7 @@ export async function getProject(projectId: string): Promise<LinearProject | nul
   const data = await gql<{ project: LinearProject }>(
     `query($id: String!) {
       project(id: $id) {
-        id name description state url
+        id name description content state url
         issues {
           nodes {
             id identifier title description priority
@@ -394,6 +424,94 @@ export async function getCompletedIssues(
 
   cache.set(cacheKey, data.issues.nodes, CACHE_TTL);
   return data.issues.nodes;
+}
+
+// --- Project updates ---
+
+export async function updateProject(
+  projectId: string,
+  updates: { name?: string; description?: string; content?: string; statusId?: string },
+): Promise<{ success: boolean; url: string }> {
+  const data = await gql<{
+    projectUpdate: { success: boolean; project: { url: string } };
+  }>(
+    `mutation($id: String!, $input: ProjectUpdateInput!) {
+      projectUpdate(id: $id, input: $input) {
+        success
+        project { url }
+      }
+    }`,
+    { id: projectId, input: updates },
+  );
+
+  cache.invalidate(`linear:project:${projectId}`);
+  cache.invalidatePrefix("linear:team:");
+  return { success: data.projectUpdate.success, url: data.projectUpdate.project.url };
+}
+
+// --- Single issue lookup ---
+
+export async function getIssue(identifier: string): Promise<LinearIssue | null> {
+  // Try by identifier filter (e.g. "AWS-516")
+  const data = await gql<{ issues: { nodes: LinearIssue[] } }>(
+    `query($ident: String!) {
+      issues(filter: { identifier: { eq: $ident } }, first: 1) {
+        nodes {
+          id identifier title description priority
+          state { name type }
+          assignee { id name }
+          labels { nodes { name } }
+          createdAt completedAt startedAt estimate url
+          project { id name }
+        }
+      }
+    }`,
+    { ident: identifier },
+  );
+  if (data.issues.nodes.length > 0) return data.issues.nodes[0];
+
+  // Fallback: search by term
+  const search = await gql<{ searchIssues: { nodes: LinearIssue[] } }>(
+    `query($term: String!) {
+      searchIssues(term: $term, first: 1) {
+        nodes {
+          id identifier title description priority
+          state { name type }
+          assignee { id name }
+          labels { nodes { name } }
+          createdAt completedAt startedAt estimate url
+          project { id name }
+        }
+      }
+    }`,
+    { term: identifier },
+  );
+  return search.searchIssues.nodes[0] ?? null;
+}
+
+// --- Archive/delete ---
+
+export async function archiveIssue(issueId: string): Promise<{ success: boolean }> {
+  const data = await gql<{ issueArchive: { success: boolean } }>(
+    `mutation($id: String!) {
+      issueArchive(id: $id) { success }
+    }`,
+    { id: issueId },
+  );
+  cache.invalidatePrefix("linear:team:");
+  return { success: data.issueArchive.success };
+}
+
+export async function archiveProject(projectId: string): Promise<{ success: boolean }> {
+  const data = await gql<{ projectArchive: { success: boolean } }>(
+    `mutation($id: String!) {
+      projectArchive(id: $id) { success }
+    }`,
+    { id: projectId },
+  );
+  cache.invalidate(`linear:project:${projectId}`);
+  cache.invalidatePrefix("linear:team:");
+  return { success: data.projectArchive.success };
 }
 
 /** Reset the cached API key (e.g. after config update) */

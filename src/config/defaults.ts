@@ -42,33 +42,26 @@ export const DEFAULT_TASK_TEMPLATE = `## Design References
 (Figma links — only for frontend tasks. Remove this section for backend tasks.)
 
 ## 1. What
-What needs to be built. Name the component, page, API, or flow.
+What needs to be built. One paragraph max.
 
 ## 2. Why
-Link to the parent project. What breaks if we don't do this.
+Link to the parent project. One sentence on what breaks if we don't do this.
 
 ## 3. Out of Scope
-- What this task does NOT cover
-- Reference related task IDs
+- What this task does NOT cover (keep to 2-3 items)
 
 ## 4. Acceptance Criteria
-- [ ] Clear, testable statement
-- [ ] Another criterion
+Max 7 items. Focus on what matters most. Each must be testable.
+- [ ]
+- [ ]
 
 ## 5. Definition of Done
-
-**Frontend:**
-| Item | Status |
-|---|---|
-| Description | ❌ |
-
-**Backend:**
-| Item | Status |
-|---|---|
-| Description | ❌ |
+Max 7 items. Only include what's relevant to THIS task.
+- [ ]
+- [ ]
 
 ## Notes / Risks
-- Open questions, dependencies, known risks
+- Only if there's something non-obvious
 `;
 
 export const WRITING_CONVENTIONS = {

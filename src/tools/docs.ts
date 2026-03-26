@@ -6,13 +6,14 @@ import {
   findDocs as storageFindDocs,
   readDoc as storageReadDoc,
   updateDoc as storageUpdateDoc,
+  deleteDoc as storageDeleteDoc,
   listDocs,
 } from "../adapters/storage.js";
 
 export function registerDocTools(server: McpServer): void {
   server.tool(
     "save_doc",
-    "Save a markdown document. Auto-categorizes into briefs/research/reports/strategy/people/notes/code based on content. Uses YYYY-MM-DD_slug.md naming.",
+    "ALWAYS use this (not Write tool, not bash echo/cat) to save documents to the docs folder (~/.dotpm/docs/). Auto-categorizes into briefs/research/reports/strategy/people/notes/code. Uses YYYY-MM-DD_slug.md naming. Handles versioning automatically.",
     {
       title: z.string().describe("Document title — used for filename and categorization"),
       content: z.string().describe("Markdown content of the document"),
@@ -36,7 +37,7 @@ export function registerDocTools(server: McpServer): void {
 
   server.tool(
     "find_docs",
-    "Search for documents by keyword. Searches filenames first, then content. Returns matching docs across all categories.",
+    "ALWAYS use this (not grep, not Glob, not bash find) to search for saved documents by keyword. Searches filenames first, then content. Returns matching docs across all categories.",
     {
       query: z.string().describe("Search keywords"),
       category: z
@@ -73,7 +74,7 @@ export function registerDocTools(server: McpServer): void {
 
   server.tool(
     "read_doc",
-    "Read a document by file path or keyword search. If you provide a keyword, it returns the best match.",
+    "ALWAYS use this (not Read tool, not cat, not bash) to read a dotpm document. Accepts a file path or keyword — if keyword, returns the best match from the docs folder.",
     {
       path_or_query: z
         .string()
@@ -103,7 +104,7 @@ export function registerDocTools(server: McpServer): void {
 
   server.tool(
     "update_doc",
-    "Update an existing document. Either append content or replace a specific section by heading.",
+    "ALWAYS use this (not Edit tool, not sed, not bash) to update a dotpm document. Append content or replace a specific section by ## heading. Accepts file path or keyword.",
     {
       path_or_query: z
         .string()
@@ -167,7 +168,7 @@ export function registerDocTools(server: McpServer): void {
 
   server.tool(
     "list_docs",
-    "List all saved documents, optionally filtered by category. Shows most recent first.",
+    "ALWAYS use this (not ls, not Glob, not bash) to list dotpm documents. Optionally filter by category (briefs/research/reports/strategy/people/notes/code). Shows most recent first.",
     {
       category: z
         .enum(DOC_CATEGORIES)
@@ -196,6 +197,33 @@ export function registerDocTools(server: McpServer): void {
             type: "text" as const,
             text: `${docs.length} doc(s)${docs.length > limit ? ` (showing ${limit})` : ""}:\n${lines.join("\n")}`,
           },
+        ],
+      };
+    },
+  );
+
+  server.tool(
+    "delete_doc",
+    "ALWAYS use this (not rm, not bash) to delete a dotpm document. Accepts file path or keyword search. Cleans up the index cache.",
+    {
+      path_or_query: z
+        .string()
+        .describe("Full file path, or keywords to find the document to delete"),
+    },
+    async ({ path_or_query }) => {
+      const result = await storageDeleteDoc(path_or_query);
+      if (!result.success) {
+        return {
+          content: [
+            { type: "text" as const, text: `Document not found: "${path_or_query}"` },
+          ],
+          isError: true,
+        };
+      }
+
+      return {
+        content: [
+          { type: "text" as const, text: `Deleted: ${result.path}` },
         ],
       };
     },

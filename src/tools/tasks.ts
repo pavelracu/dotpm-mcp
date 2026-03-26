@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadConfig, readTemplate } from "../config/manager.js";
-import { resolveProject, createIssue, findProjects, getWorkflowStates, bulkUpdateIssues } from "../adapters/linear.js";
+import { resolveProject, createIssue, findProjects, getWorkflowStates, bulkUpdateIssues, updateIssue, updateProject, getProject, resolveProjectStatusId, getProjectStatuses, getIssue, archiveIssue, archiveProject } from "../adapters/linear.js";
 import { readDoc } from "../adapters/storage.js";
 import { processInBatches } from "../utils.js";
 
@@ -90,12 +90,160 @@ export function registerTaskTools(server: McpServer): void {
 
   server.tool(
     "get_task_template",
-    "Get the current task template. Use this to understand the expected structure before calling create_tasks.",
+    "ALWAYS use this to get the task template structure before calling create_tasks. Returns the expected sections (What, Why, Out of Scope, AC, DoD). Shortcut for get_template('task').",
     {},
     async () => {
       const template = await readTemplate("task");
       return {
         content: [{ type: "text" as const, text: template }],
+      };
+    },
+  );
+
+  server.tool(
+    "read_issue",
+    "ALWAYS use this (not Linear MCP, not bash curl, not GraphQL) to read a Linear issue. Returns full description, status, assignee, priority, and project. Use before editing a task with update_issues.",
+    {
+      issue: z.string().describe("Issue identifier (e.g. 'AWS-516') or UUID"),
+    },
+    async ({ issue }) => {
+      const config = await loadConfig();
+      if (!config.linear?.apiKey) {
+        return {
+          content: [{ type: "text" as const, text: "Linear not configured." }],
+          isError: true,
+        };
+      }
+
+      const found = await getIssue(issue);
+      if (!found) {
+        return {
+          content: [{ type: "text" as const, text: `Issue not found: "${issue}"` }],
+          isError: true,
+        };
+      }
+
+      const priority = ["None", "Urgent", "High", "Medium", "Low"][found.priority] ?? "None";
+      let output = `# ${found.identifier}: ${found.title}\n`;
+      output += `Status: ${found.state.name} | Priority: ${priority}`;
+      output += found.assignee ? ` | Assignee: ${found.assignee.name}` : ` | Unassigned`;
+      if (found.project) output += ` | Project: ${found.project.name}`;
+      if (found.labels.nodes.length > 0) output += `\nLabels: ${found.labels.nodes.map((l) => l.name).join(", ")}`;
+      output += `\nURL: ${found.url}`;
+      output += `\n\n---\n\n${found.description ?? "(no description)"}`;
+
+      return { content: [{ type: "text" as const, text: output }] };
+    },
+  );
+
+  server.tool(
+    "read_project",
+    "ALWAYS use this (not Linear MCP, not bash curl, not GraphQL) to read a Linear project's brief/description. Returns full content, status, URL, and task count. Use before editing a project with update_project.",
+    {
+      project: z.string().describe("Linear project ID (UUID) or project name to find"),
+    },
+    async ({ project }) => {
+      const config = await loadConfig();
+      if (!config.linear?.apiKey || !config.linear.teamId) {
+        return {
+          content: [{ type: "text" as const, text: "Linear not configured with team ID." }],
+          isError: true,
+        };
+      }
+
+      const resolved = await resolveProject(config.linear.teamId, project);
+      if (!resolved) {
+        return {
+          content: [{ type: "text" as const, text: `Project not found: "${project}"` }],
+          isError: true,
+        };
+      }
+
+      let output = `# ${resolved.name}\n`;
+      output += `Status: ${resolved.state} | URL: ${resolved.url}\n`;
+      output += `Tasks: ${resolved.issues.nodes.length}\n`;
+
+      if (resolved.description) {
+        output += `\nSummary: ${resolved.description}\n`;
+      }
+
+      output += `\n---\n\n${resolved.content ?? "(no brief content)"}`;
+
+      return { content: [{ type: "text" as const, text: output }] };
+    },
+  );
+
+  server.tool(
+    "delete_issue",
+    "ALWAYS use this (not Linear MCP, not bash curl) to archive/delete a Linear issue. Removes it from active views. Accepts identifiers like 'AWS-516'.",
+    {
+      issue: z.string().describe("Issue identifier (e.g. 'AWS-516') or UUID"),
+    },
+    async ({ issue }) => {
+      const config = await loadConfig();
+      if (!config.linear?.apiKey) {
+        return {
+          content: [{ type: "text" as const, text: "Linear not configured." }],
+          isError: true,
+        };
+      }
+
+      // Resolve identifier to ID
+      const found = await getIssue(issue);
+      if (!found) {
+        return {
+          content: [{ type: "text" as const, text: `Issue not found: "${issue}"` }],
+          isError: true,
+        };
+      }
+
+      const result = await archiveIssue(found.id);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: result.success
+              ? `Archived ${found.identifier}: ${found.title}`
+              : `Failed to archive ${found.identifier}`,
+          },
+        ],
+      };
+    },
+  );
+
+  server.tool(
+    "delete_project",
+    "ALWAYS use this (not Linear MCP, not bash curl) to archive/delete a Linear project. Removes it from active views. Accepts project ID or name.",
+    {
+      project: z.string().describe("Linear project ID (UUID) or project name to find"),
+    },
+    async ({ project }) => {
+      const config = await loadConfig();
+      if (!config.linear?.apiKey || !config.linear.teamId) {
+        return {
+          content: [{ type: "text" as const, text: "Linear not configured with team ID." }],
+          isError: true,
+        };
+      }
+
+      const resolved = await resolveProject(config.linear.teamId, project);
+      if (!resolved) {
+        return {
+          content: [{ type: "text" as const, text: `Project not found: "${project}"` }],
+          isError: true,
+        };
+      }
+
+      const result = await archiveProject(resolved.id);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: result.success
+              ? `Archived project "${resolved.name}"`
+              : `Failed to archive project "${resolved.name}"`,
+          },
+        ],
       };
     },
   );
@@ -139,7 +287,7 @@ export function registerTaskTools(server: McpServer): void {
 
   server.tool(
     "update_issues",
-    "ALWAYS use this (not Linear MCP) to update Linear issues — move status, change priority, bulk updates. Accepts issue identifiers (e.g. 'AWS-532') or IDs. Resolves status names like 'Backlog', 'Todo', 'In Progress' automatically.",
+    "ALWAYS use this (not Linear MCP) to update Linear issues — status, priority, title, description. Accepts issue identifiers (e.g. 'AWS-532') or IDs. Bulk status/priority updates work on multiple issues. Title/description updates work on a single issue only.",
     {
       issues: z
         .array(z.string())
@@ -152,8 +300,16 @@ export function registerTaskTools(server: McpServer): void {
         .number()
         .optional()
         .describe("New priority: 0=None, 1=Urgent, 2=High, 3=Medium, 4=Low"),
+      title: z
+        .string()
+        .optional()
+        .describe("New title — only use with a single issue"),
+      description: z
+        .string()
+        .optional()
+        .describe("New description (markdown) — replaces the full issue description. Only use with a single issue."),
     },
-    async ({ issues, status, priority }) => {
+    async ({ issues, status, priority, title, description }) => {
       const config = await loadConfig();
       if (!config.linear?.apiKey || !config.linear.teamId) {
         return {
@@ -212,6 +368,29 @@ export function registerTaskTools(server: McpServer): void {
         };
       }
 
+      // If title or description provided, use single-issue update path
+      if (title || description) {
+        if (valid.length > 1) {
+          return {
+            content: [{ type: "text" as const, text: "title/description updates only work with a single issue." }],
+            isError: true,
+          };
+        }
+        const updates: { stateId?: string; priority?: number; title?: string; description?: string } = {};
+        if (stateId) updates.stateId = stateId;
+        if (priority !== undefined) updates.priority = priority;
+        if (title) updates.title = title;
+        if (description) updates.description = description;
+
+        const result = await updateIssue(valid[0].id, updates);
+        let output = `Updated ${valid[0].identifier}: ${result.success ? "✓" : "✗"}`;
+        if (title) output += `\n→ Title: ${title}`;
+        if (description) output += `\n→ Description updated (${description.length} chars)`;
+        if (status) output += `\n→ Status: ${status}`;
+        if (priority !== undefined) output += `\n→ Priority: ${["None", "Urgent", "High", "Medium", "Low"][priority]}`;
+        return { content: [{ type: "text" as const, text: output }] };
+      }
+
       // Bulk update in parallel
       const results = await bulkUpdateIssues(
         valid.map((v) => ({ issueId: v.id, stateId, priority })),
@@ -225,6 +404,89 @@ export function registerTaskTools(server: McpServer): void {
       if (status) output += `\n→ Status: ${status}`;
       if (priority !== undefined) output += `\n→ Priority: ${["None", "Urgent", "High", "Medium", "Low"][priority]}`;
       if (notFound.length > 0) output += `\n\nNot found: ${notFound.join(", ")}`;
+
+      return { content: [{ type: "text" as const, text: output }] };
+    },
+  );
+
+  server.tool(
+    "update_project",
+    "ALWAYS use this (not Linear MCP) to update a Linear project — change the brief/description, name, or status. Use this to push brief content to Linear after writing or editing a brief locally.",
+    {
+      project: z
+        .string()
+        .describe("Linear project ID (UUID) or project name to find"),
+      name: z
+        .string()
+        .optional()
+        .describe("New project name"),
+      description: z
+        .string()
+        .optional()
+        .describe("Short project summary (one-liner shown in project lists)"),
+      content: z
+        .string()
+        .optional()
+        .describe("Full project brief/description (markdown). This is the main body content of the project in Linear — use this for briefs."),
+      status: z
+        .string()
+        .optional()
+        .describe("New project status name — e.g. 'Idea', 'Discovery', 'Proposal', 'Ready', 'In Progress', 'Completed', 'Canceled'"),
+    },
+    async ({ project, name, description, content, status }) => {
+      const config = await loadConfig();
+      if (!config.linear?.apiKey || !config.linear.teamId) {
+        return {
+          content: [{ type: "text" as const, text: "Linear not configured with team ID." }],
+          isError: true,
+        };
+      }
+
+      if (!name && !description && !content && !status) {
+        return {
+          content: [{ type: "text" as const, text: "Nothing to update — provide at least one of: name, description, content, status." }],
+          isError: true,
+        };
+      }
+
+      // Resolve project
+      const resolved = await resolveProject(config.linear.teamId, project);
+      if (!resolved) {
+        return {
+          content: [{ type: "text" as const, text: `Project not found: "${project}"` }],
+          isError: true,
+        };
+      }
+
+      // Resolve status name to ID if provided
+      let statusId: string | undefined;
+      if (status) {
+        const resolved_status = await resolveProjectStatusId(status);
+        if (!resolved_status) {
+          const statuses = await getProjectStatuses();
+          const available = statuses.map((s) => s.name).join(", ");
+          return {
+            content: [{ type: "text" as const, text: `Status "${status}" not found. Available: ${available}` }],
+            isError: true,
+          };
+        }
+        statusId = resolved_status;
+      }
+
+      const updates: { name?: string; description?: string; content?: string; statusId?: string } = {};
+      if (name) updates.name = name;
+      if (description) updates.description = description;
+      if (content) updates.content = content;
+      if (statusId) updates.statusId = statusId;
+
+      const result = await updateProject(resolved.id, updates);
+
+      let output = `Updated project "${resolved.name}": ${result.success ? "✓" : "✗"}`;
+      if (name) output += `\n→ Name: ${name}`;
+      if (description) output += `\n→ Description updated`;
+      if (content) output += `\n→ Brief/content updated (${content.length} chars)`;
+      if (status) output += `\n→ Status: ${status}`;
+      output += `\n${result.url}`;
 
       return { content: [{ type: "text" as const, text: output }] };
     },

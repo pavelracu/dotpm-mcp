@@ -6,8 +6,36 @@ import type { TeamConfig, TeamMember } from "../config/types.js";
 
 export function registerTeamTools(server: McpServer): void {
   server.tool(
+    "read_team",
+    "ALWAYS use this (not bash cat, not Read tool on team.json) to view the team roster. Shows names, roles, capabilities, constraints, and sprint capacity. Use before configure_team to see what's already set.",
+    {},
+    async () => {
+      const team = await loadTeam();
+      if (!team || team.members.length === 0) {
+        return {
+          content: [{ type: "text" as const, text: "No team configured. Use configure_team to set up your roster." }],
+        };
+      }
+
+      let output = `# Team Roster (${team.members.length} members)\n\n`;
+      output += `| Name | Role | Capabilities | Constraints | Sprint Capacity |\n`;
+      output += `|---|---|---|---|---|\n`;
+
+      for (const m of team.members) {
+        const caps = m.capabilities.join(", ");
+        const constraints = m.constraints?.length ? m.constraints.join(", ") : "—";
+        output += `| ${m.name} | ${m.role} | ${caps} | ${constraints} | ${m.sprintCapacity ?? "—"} |\n`;
+      }
+
+      output += `\nAuto-assignment: ${team.conventions?.noAutoAssignment ? "disabled" : "enabled"}`;
+
+      return { content: [{ type: "text" as const, text: output }] };
+    },
+  );
+
+  server.tool(
     "configure_team",
-    "Set up your team roster with roles, capabilities, and capacity constraints. Saved to ~/.dotpm/team.json.",
+    "ALWAYS use this (not Write tool, not bash) to set up or update the team roster. Defines roles, capabilities, constraints, and capacity. Saved to ~/.dotpm/team.json. Also used to update — replaces the full roster.",
     {
       members: z
         .array(
@@ -63,7 +91,7 @@ export function registerTeamTools(server: McpServer): void {
 
   server.tool(
     "team_pulse",
-    "Get per-person performance data from Linear. Shows completion rate, cycle time, current load. Facts only, no characterizations.",
+    "ALWAYS use this (not Linear MCP, not bash curl) for per-person performance data. Shows completion rate, avg cycle time, current sprint load. Use when asked 'how is the team doing', 'who is overloaded', or 'team performance'.",
     {
       days: z
         .number()

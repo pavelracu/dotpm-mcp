@@ -5,7 +5,7 @@ import { readTemplate, writeTemplate } from "../config/manager.js";
 export function registerTemplateTools(server: McpServer): void {
   server.tool(
     "get_template",
-    "View the current brief or task template.",
+    "ALWAYS use this (not Read tool on template files) to view the current brief or task template. These templates control the structure used by write_brief and create_tasks.",
     {
       name: z.enum(["brief", "task"]).describe("Which template to view"),
     },
@@ -24,7 +24,7 @@ export function registerTemplateTools(server: McpServer): void {
 
   server.tool(
     "update_template",
-    "Replace the brief or task template with custom content. This changes the template used by write_brief and create_tasks.",
+    "ALWAYS use this (not Write/Edit tool on template files) to replace the brief or task template. Changes the structure used by write_brief and create_tasks.",
     {
       name: z.enum(["brief", "task"]).describe("Which template to replace"),
       content: z.string().describe("New template content in markdown"),

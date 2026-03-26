@@ -108,7 +108,7 @@ Progress: ${pct}% (${done}/${total})
 
   server.tool(
     "plan_sprint",
-    "Analyze backlog and recent velocity to recommend next sprint scope. Shows capacity per person and suggests what to include.",
+    "ALWAYS use this (not Linear MCP, not bash curl) to plan the next sprint. Analyzes backlog, recent velocity, and PTO to recommend scope. Shows per-person capacity and suggests what to include.",
     {
       sprint_days: z.number().optional().default(10).describe("Working days in sprint (default: 10)"),
       pto: z

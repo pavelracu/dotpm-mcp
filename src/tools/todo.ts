@@ -79,7 +79,7 @@ function nextTodoId(todos: TodoItem[]): number {
 export function registerTodoTools(server: McpServer): void {
   server.tool(
     "add_todo",
-    "Add a personal todo to your dotpm list (~/.dotpm/todos.md). Use this for YOUR action items — things you need to do, not tasks for the team. For team tasks in Linear, use create_tasks instead. Keep it short — you can elaborate when you process it later.",
+    "ALWAYS use this (not Write tool, not bash echo) to add a personal todo. Saved to ~/.dotpm/todos.md. Use this for YOUR action items — things you need to do, not tasks for the team. For team tasks in Linear, use create_tasks instead.",
     {
       text: z.string().describe("What needs to be done. Short description."),
       tags: z
@@ -114,7 +114,7 @@ export function registerTodoTools(server: McpServer): void {
 
   server.tool(
     "get_todos",
-    "Get your open personal todos from dotpm (~/.dotpm/todos.md), enriched with related documents found in your docs folder. These are YOUR action items, not team tasks from Linear.",
+    "ALWAYS use this (not Read tool, not cat on todos.md) to get your personal todos. Enriches each item with related docs. These are YOUR action items, not team tasks from Linear — use sprint_status for those.",
     {
       include_done: z
         .boolean()
@@ -179,7 +179,7 @@ export function registerTodoTools(server: McpServer): void {
 
   server.tool(
     "complete_todo",
-    "Mark a todo as done. Optionally link to the output (a doc path or Linear URL).",
+    "ALWAYS use this (not Edit tool, not bash) to mark a todo as done. Optionally link to the output (a doc path or Linear URL). Use update_todo to edit text/tags without completing.",
     {
       todo_id: z.number().describe("The todo ID number (shown in get_todos)"),
       link: z
@@ -210,6 +210,81 @@ export function registerTodoTools(server: McpServer): void {
             {
               type: "text" as const,
               text: `Completed todo #${todo_id}: ${todo.text}${link ? `\n  → ${link}` : ""}`,
+            },
+          ],
+        };
+      });
+    },
+  );
+
+  server.tool(
+    "update_todo",
+    "ALWAYS use this (not Edit tool, not bash) to edit a todo's text or tags. Use this to refine a todo without completing or deleting it.",
+    {
+      todo_id: z.number().describe("The todo ID number (shown in get_todos)"),
+      text: z.string().optional().describe("New text for the todo"),
+      tags: z
+        .array(z.string())
+        .optional()
+        .describe("Replace tags with these (e.g. ['linear', 'brief'])"),
+    },
+    async ({ todo_id, text, tags }) => {
+      return withTodoLock(async () => {
+        const todos = await loadTodos();
+        const todo = todos.find((t) => t.id === todo_id);
+
+        if (!todo) {
+          return {
+            content: [{ type: "text" as const, text: `Todo #${todo_id} not found.` }],
+            isError: true,
+          };
+        }
+
+        if (text) todo.text = text;
+        if (tags) todo.tags = tags;
+
+        await saveTodos(todos);
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Updated todo #${todo_id}: ${todo.text}${todo.tags.length ? ` [${todo.tags.join(", ")}]` : ""}`,
+            },
+          ],
+        };
+      });
+    },
+  );
+
+  server.tool(
+    "delete_todo",
+    "ALWAYS use this (not Edit tool, not bash) to remove a todo entirely. Re-numbers remaining todos. Use complete_todo instead if the work was actually done.",
+    {
+      todo_id: z.number().describe("The todo ID number (shown in get_todos)"),
+    },
+    async ({ todo_id }) => {
+      return withTodoLock(async () => {
+        const todos = await loadTodos();
+        const idx = todos.findIndex((t) => t.id === todo_id);
+
+        if (idx === -1) {
+          return {
+            content: [{ type: "text" as const, text: `Todo #${todo_id} not found.` }],
+            isError: true,
+          };
+        }
+
+        const removed = todos.splice(idx, 1)[0];
+        // Re-number remaining todos
+        todos.forEach((t, i) => { t.id = i + 1; });
+        await saveTodos(todos);
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Deleted todo: ${removed.text}`,
             },
           ],
         };
