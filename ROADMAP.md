@@ -43,6 +43,21 @@ When users type requests directly (not via prompts), Claude may use Linear MCP +
 - A lightweight proxy that intercepts Linear MCP responses and appends rules
 - Client-side configuration (when claude.ai supports per-MCP instructions)
 
+### Known limitation: subagent routing (Claude Code only)
+
+When Claude Code spawns subagents for parallel work, those agents don't inherit the dotpm routing preamble. They may:
+- Read `~/.dotpm/config.json` directly and make raw curl calls to Linear API (leaking the API key)
+- Use Bash (`grep`, `find`) instead of dotpm's `find_docs`/`read_doc` for document search
+- Duplicate work that dotpm tools already handle
+
+This is a Claude Code limitation — subagents are independent processes. In claude.ai (target platform), there are no subagents, so this doesn't apply.
+
+**Mitigations applied:**
+- `chmod 600` on config.json to restrict casual reads
+- Aggressive tool descriptions ("ALWAYS use this, not Linear MCP")
+
+**Future fix:** Config file encryption or OS keychain storage for API keys
+
 ## Future: v0.3+
 
 - **GitHub integration** — PR creation, code review workflows
