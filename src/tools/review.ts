@@ -145,51 +145,38 @@ export function registerReviewTools(server: McpServer): void {
 
       const findings = analyzeTaskConsistency(issues, brief?.content);
 
-      let output = `# Task Review: ${projectData.name}\nTasks: ${issues.length} | Findings: ${findings.length}\n`;
+      // --- Build PM-oriented output: summary first, details second ---
+      let output = `# Task Review: ${projectData.name}\n`;
+      output += `Tasks: ${issues.length} | Findings: ${findings.length}\n`;
+      output += `Brief: ${projectData.description ? "loaded" : "not found"}\n`;
 
-      // Include project brief/description so Claude knows it's already loaded
-      const hasBrief = !!(projectData.description || brief);
-      if (projectData.description) {
-        output += `\n## Project Brief (already loaded — do NOT offer to fetch it)\n${projectData.description.slice(0, 3000)}\n`;
-      }
-      if (brief) {
-        output += `\n## Linked Brief Document (already loaded — do NOT offer to fetch it)\n${brief.content.slice(0, 3000)}\n`;
-      }
-      if (hasBrief) {
-        output += `\nNOTE: The project brief is included above. Do NOT ask the user if they want to "pull" or "read" the brief — you already have it. Analyze it directly.\n`;
-      }
-
+      // Findings as a flat table — no walls of text
       if (findings.length === 0) {
         output += "\n✓ No issues found. Tasks look consistent.";
       } else {
-        const high = findings.filter((f) => f.severity === "high");
-        const medium = findings.filter((f) => f.severity === "medium");
-        const low = findings.filter((f) => f.severity === "low");
-
-        if (high.length > 0) {
-          output += "\n## High Severity";
-          for (const f of high) {
-            output += `\n  ✗ [${f.type}] ${f.description}`;
-          }
-        }
-        if (medium.length > 0) {
-          output += "\n\n## Medium Severity";
-          for (const f of medium) {
-            output += `\n  ⚠ [${f.type}] ${f.description}`;
-          }
-        }
-        if (low.length > 0) {
-          output += "\n\n## Low Severity";
-          for (const f of low) {
-            output += `\n  ℹ [${f.type}] ${f.description}`;
-          }
+        output += "\n## Findings\n| Severity | Type | Detail |\n|---|---|---|";
+        for (const f of [...findings].sort((a, b) => {
+          const order = { high: 0, medium: 1, low: 2 };
+          return order[a.severity] - order[b.severity];
+        })) {
+          output += `\n| ${f.severity} | ${f.type} | ${f.description} |`;
         }
       }
 
-      output += "\n\n## Task List";
+      // Task list as compact table
+      output += "\n\n## Tasks\n| ID | Title | Status |\n|---|---|---|";
       for (const issue of issues) {
-        output += `\n  ${issue.identifier}: ${issue.title} [${issue.state.name}]`;
+        output += `\n| ${issue.identifier} | ${issue.title} | ${issue.state.name} |`;
       }
+
+      // Brief summary — not the full text, just enough for context
+      if (projectData.description) {
+        // Extract first 500 chars as summary
+        const briefSummary = projectData.description.slice(0, 500).replace(/\n/g, " ").trim();
+        output += `\n\n## Brief Summary (full brief already loaded — do NOT offer to fetch it)\n${briefSummary}${projectData.description.length > 500 ? "..." : ""}`;
+      }
+
+      output += `\n\nINSTRUCTIONS: Present findings concisely. Use tables. Do NOT expand into lengthy analysis. The user is a PM — they need actionable items, not explanations. Do NOT offer to read the brief — it's already loaded above.`;
 
       // Inject rules so Claude follows conventions in its analysis
       const rules = await getRulesContext();
