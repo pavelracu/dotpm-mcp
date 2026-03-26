@@ -147,6 +147,14 @@ export function registerReviewTools(server: McpServer): void {
 
       let output = `# Task Review: ${projectData.name}\nTasks: ${issues.length} | Findings: ${findings.length}\n`;
 
+      // Include project brief/description so Claude knows it's already loaded
+      if (projectData.description) {
+        output += `\n## Project Brief\n${projectData.description.slice(0, 3000)}\n`;
+      }
+      if (brief) {
+        output += `\n## Linked Brief Document\n${brief.content.slice(0, 3000)}\n`;
+      }
+
       if (findings.length === 0) {
         output += "\n✓ No issues found. Tasks look consistent.";
       } else {
